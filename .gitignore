@@ -85,3 +85,7 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# ===== 化验事件日志与快照（运行期数据） =====
+data/
+backend/data/

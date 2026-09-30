@@ -59,6 +59,39 @@
       <span>共 {{ total }} 条样品登记记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <section class="trace-block">
+      <header class="trace-head">
+        <div>
+          <h3>样品追溯清单</h3>
+          <p class="page-desc">化验确认结论在同一事务回写：同一化验编号只出现最近确认复检版本，未确认复检与历史版本不会重复显示。</p>
+        </div>
+        <form class="trace-filter" @submit.prevent="loadTrace">
+          <input v-model="traceFilter" placeholder="按样品编号/化验编号检索" />
+          <button class="btn" type="submit">检索</button>
+          <button class="btn ghost" type="button" @click="traceFilter = ''; loadTrace()">重置</button>
+        </form>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th v-for="column in traceColumns" :key="column">{{ column }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(row, idx) in traceRows" :key="`${String(row['化验编号'])}-${idx}`">
+            <td v-for="column in traceColumns" :key="column">{{ row[column] ?? '—' }}</td>
+          </tr>
+          <tr v-if="!traceRows.length">
+            <td :colspan="traceColumns.length" class="empty-state">暂无已确认化验结论，确认后自动回写到这里</td>
+          </tr>
+        </tbody>
+      </table>
+      <footer class="page-foot">
+        <span>共 {{ traceRows.length }} 条已确认追溯记录</span>
+        <span v-if="traceError" class="error-text">{{ traceError }}</span>
+      </footer>
+    </section>
   </section>
 </template>
 
@@ -126,5 +159,53 @@ async function reload() {
   }
 }
 
-onMounted(reload)
+// ---- 样品追溯清单（数据来自化验内核的已确认投影） ------------------------------
+type TraceRow = Record<string, string | number | null>
+const traceColumns = ['样品编号', '化验编号', '元素名称', '化验值', '单位', '化验方法', '化验日期', '确认版本', '确认时间']
+const traceRows = ref<TraceRow[]>([])
+const traceFilter = ref('')
+const traceError = ref('')
+
+async function loadTrace() {
+  traceError.value = ''
+  const params = new URLSearchParams()
+  if (traceFilter.value) params.set('keyword', traceFilter.value)
+  try {
+    const response = await request(`/api/sample_registry/traceability?${params.toString()}`)
+    if (!response.ok) throw new Error('样品追溯清单读取失败')
+    const payload = await response.json()
+    traceRows.value = payload.items ?? []
+  } catch (error) {
+    traceError.value = error instanceof Error ? error.message : '样品追溯清单读取失败'
+  }
+}
+
+onMounted(() => {
+  void reload()
+  void loadTrace()
+})
 </script>
+
+<style scoped>
+.trace-block {
+  margin-top: 24px;
+}
+.trace-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.trace-filter {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.trace-filter input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+</style>

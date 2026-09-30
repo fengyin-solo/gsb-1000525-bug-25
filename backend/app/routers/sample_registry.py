@@ -16,6 +16,21 @@ LIST_FIELDS = ["送检编号", "样品名称", "采样位置", "检测项目", "
 STATUSES = ["待收样", "已收样", "检测中", "已出报告"]
 
 
+@router.get("/traceability")
+def traceability(
+    sample_no: str | None = Query(default=None, description="按样品编号过滤"),
+    keyword: str | None = Query(default=None, description="样品编号或化验编号关键字"),
+) -> dict[str, Any]:
+    """样品追溯清单：化验确认结论在同一事务里回写到这里。
+
+    同一化验编号只投影最近确认复检版本，未确认复检不会出现，避免旧结果覆盖与重复。
+    """
+    from app.services.assay import AssayService
+
+    items = AssayService().traceability(sample_no=sample_no, keyword=keyword)
+    return {"module": "sample_registry", "total": len(items), "items": items}
+
+
 @router.get("", response_model=PageResult[dict])
 def list_entries(
     keyword: str | None = Query(default=None, description="按送检编号检索"),

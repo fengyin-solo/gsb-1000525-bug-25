@@ -74,3 +74,29 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+
+## 化验数据：版本化持久化与投影
+
+化验模块（`assay`）不是就地改内存，而是事件溯源，相关文件：
+
+- `app/persistence.py`：追加式事件日志（`journal.jsonl`）、原子快照（`snapshot.json`）、
+  出站通道日志（`dispatch.log.jsonl`），全部标准库实现，文件在 `backend/data/`
+  （可用环境变量 `ASSAY_DATA_DIR` 覆盖，已在 `.gitignore` 忽略）。
+- `app/domain/assay.py`：纯函数 reducer、命令校验、三个读模型投影与存量迁移。
+- `app/kernel.py`：事件提交（事务边界）、journal/snapshot 恢复、outbox 幂等投递。
+- `app/assay_kernel.py`：单例装配，启动时把缺版本号的存量记录回填为 v1（只迁一次）。
+
+口径：
+
+- 同一**化验编号**是聚合根，每次复检生成新版本；**最近确认复检**为准，
+  历史结果按原版本保留（`GET /api/assay/{化验编号}` 的 `历史版本`）。
+- 未确认复检不会进入任何投影，因此不会覆盖或重复显示。
+- 「确认结论」在一个事务内回写三处：化验台账、样品追溯清单
+  （`GET /api/sample_registry/traceability` 与 `GET /api/assay/trace` 同源）、
+  报告数据面板（`GET /api/assay/report_panel`），并追加一条出站确认事件。
+- 动作请求可带 `request_id`（或 `Idempotency-Key` 头）：重连重放返回首次结论；
+  并发确认只有一个成功，冲突返回 409，未成功请求不会覆盖已确认结果。
+- 出站事件由后台 relay 每 2 秒扫描投递，也可 `POST /api/assay/outbound/replay`
+  手动重放；按 `event_id` 去重，进程/连接复位后不重复通知。
+
+后端回归测试：`cd backend && python3 -m unittest discover -s tests`。

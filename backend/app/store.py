@@ -27,10 +27,30 @@ class Store:
                 return row
         return None
 
+    @staticmethod
+    def _assay_overview() -> dict[str, object]:
+        # 延迟导入：assay_kernel 装配时会反向引用内存仓库做存量迁移
+        from app import assay_kernel
+
+        ledger, total = assay_kernel.kernel.ledger(page=1, size=10000)
+        panel = assay_kernel.kernel.report_panel()
+        pending = int(panel["待确认结果"]) + int(panel["退回待复检"])
+        return {
+            "name": "assay",
+            "created": total,
+            "pending": pending,
+            "abnormal": int(panel["退回待复检"]),
+        }
+
     def overview(self) -> dict[str, object]:
         modules: list[dict[str, object]] = []
         for name in self.module_names():
             rows = self.rows(name)
+            if name == "assay":
+                # 化验模块已事件化：概览与台账/投影取同一口径，避免刷新后数字对不上
+                stats = self._assay_overview()
+                modules.append(stats)
+                continue
             modules.append({
                 "name": name,
                 "created": len(rows),
