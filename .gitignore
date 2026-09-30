@@ -85,3 +85,6 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# 运行期事件日志/投影快照
+backend/data/
